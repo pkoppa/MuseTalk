@@ -13,6 +13,11 @@ DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
 RUN_VERIFY="${RUN_VERIFY:-1}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "${VENV_DIR}" = /* ]]; then
+  VENV_PATH="${VENV_DIR}"
+else
+  VENV_PATH="${ROOT_DIR}/${VENV_DIR}"
+fi
 
 log() {
   echo
@@ -82,10 +87,10 @@ if [[ "${INSTALL_APT_DEPS}" == "1" ]]; then
 fi
 
 log "Creating virtual environment at ${VENV_DIR}"
-"${PYTHON_BIN}" -m venv "${ROOT_DIR}/${VENV_DIR}"
+"${PYTHON_BIN}" -m venv "${VENV_PATH}"
 
 log "Activating virtual environment"
-source "${ROOT_DIR}/${VENV_DIR}/bin/activate"
+source "${VENV_PATH}/bin/activate"
 
 log "Upgrading packaging tools"
 python -m pip install -U pip wheel
@@ -163,7 +168,7 @@ fi
 log "Install complete"
 cat <<EOF
 Next steps:
-  source ${ROOT_DIR}/${VENV_DIR}/bin/activate
+  source ${VENV_PATH}/bin/activate
   cd ${ROOT_DIR}
   sh inference.sh v1.5 normal
 

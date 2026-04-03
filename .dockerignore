@@ -1,0 +1,12 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+models
+results
+exp_out
+dataset
+tmp

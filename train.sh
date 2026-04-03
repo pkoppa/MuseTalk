@@ -14,6 +14,9 @@ if [ $# -ne 1 ]; then
 fi
 
 STAGE=$1
+ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-./configs/training/gpu.yaml}
+TRAIN_CONFIG=${TRAIN_CONFIG:-./configs/training/$STAGE.yaml}
+MAIN_PROCESS_PORT=${MAIN_PROCESS_PORT:-29502}
 
 # Validate stage argument
 if [ "$STAGE" != "stage1" ] && [ "$STAGE" != "stage2" ]; then
@@ -27,8 +30,11 @@ fi
 # train.py: Training script
 # --config: Path to the training configuration file
 echo "Starting $STAGE training..."
-accelerate launch --config_file ./configs/training/gpu.yaml \
-                  --main_process_port 29502 \
-                  train.py --config ./configs/training/$STAGE.yaml
+echo "Accelerate config: $ACCELERATE_CONFIG"
+echo "Training config:   $TRAIN_CONFIG"
+echo "Main process port: $MAIN_PROCESS_PORT"
+accelerate launch --config_file "$ACCELERATE_CONFIG" \
+                  --main_process_port "$MAIN_PROCESS_PORT" \
+                  train.py --config "$TRAIN_CONFIG"
 
-echo "Training completed for $STAGE" 
+echo "Training completed for $STAGE"

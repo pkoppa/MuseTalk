@@ -4,6 +4,8 @@ This document captures the stable installation path we validated for Ubuntu serv
 
 It also documents the dependency conflicts we hit during setup and the fixes already folded into this repository.
 
+It now also includes a Docker workflow and validated multi-GPU training presets for 8x H100 systems.
+
 ## Recommended Environment
 
 - OS: Ubuntu 22.04 or newer
@@ -37,6 +39,117 @@ The script will:
 - download model weights
 - reapply fragile version pins such as `numpy` and `huggingface_hub`
 - run a quick verification step
+
+## Docker
+
+### Build the image
+
+From the repository root:
+
+```bash
+docker build -t musetalk:cu121 .
+```
+
+The image installs the validated Ubuntu + `venv` software stack but does not bake model weights into the image.
+
+### Run the container
+
+The simplest interactive run command is:
+
+```bash
+docker run --rm -it \
+  --gpus all \
+  --ipc=host \
+  --shm-size=16g \
+  -v $(pwd)/models:/workspace/MuseTalk/models \
+  -v $(pwd)/data:/workspace/MuseTalk/data \
+  -v $(pwd)/results:/workspace/MuseTalk/results \
+  -v $(pwd)/exp_out:/workspace/MuseTalk/exp_out \
+  musetalk:cu121
+```
+
+This drops you into a shell inside the container at `/workspace/MuseTalk`.
+
+### Run the container in the background
+
+```bash
+docker run -d \
+  --name musetalk \
+  --gpus all \
+  --ipc=host \
+  --shm-size=16g \
+  -v $(pwd)/models:/workspace/MuseTalk/models \
+  -v $(pwd)/data:/workspace/MuseTalk/data \
+  -v $(pwd)/results:/workspace/MuseTalk/results \
+  -v $(pwd)/exp_out:/workspace/MuseTalk/exp_out \
+  musetalk:cu121 \
+  sleep infinity
+```
+
+Then open a shell in the running container:
+
+```bash
+docker exec -it musetalk bash
+```
+
+### First-time setup inside the container
+
+If the `models` directory on the host is still empty, download weights once:
+
+```bash
+bash download_weights.sh
+```
+
+Because `models` is mounted from the host, the downloaded weights persist across container restarts.
+
+### Run inference inside the container
+
+```bash
+sh inference.sh v1.5 normal
+```
+
+## Multi-GPU Training
+
+The repository now includes validated 8x H100 presets:
+
+- `configs/training/gpu_8xh100.yaml`
+- `configs/training/stage1_8xh100.yaml`
+- `configs/training/stage2_8xh100.yaml`
+
+These settings are tuned for a single machine with 8 GPUs and enable:
+
+- `MULTI_GPU` launch through `accelerate`
+- `bf16` mixed precision
+- pinned-memory dataloaders
+- conservative batch sizing for 80 GB H100 systems
+
+### Stage 1 on 8x H100
+
+```bash
+ACCELERATE_CONFIG=./configs/training/gpu_8xh100.yaml \
+TRAIN_CONFIG=./configs/training/stage1_8xh100.yaml \
+sh train.sh stage1
+```
+
+### Stage 2 on 8x H100
+
+```bash
+ACCELERATE_CONFIG=./configs/training/gpu_8xh100.yaml \
+TRAIN_CONFIG=./configs/training/stage2_8xh100.yaml \
+sh train.sh stage2
+```
+
+### Notes on the 8x H100 presets
+
+- `stage1_8xh100.yaml` uses `train_bs: 16` per GPU with `bf16`
+- `stage2_8xh100.yaml` uses `train_bs: 1` and `gradient_accumulation_steps: 8` to stay within 80 GB GPU memory more safely
+- `train.sh` now accepts `ACCELERATE_CONFIG`, `TRAIN_CONFIG`, and `MAIN_PROCESS_PORT`
+- `train.py` now honors `solver.mixed_precision`
+
+If you want to use fewer GPUs, either:
+
+- edit `configs/training/gpu_8xh100.yaml` and change `gpu_ids` plus `num_processes`
+- or create a copy with the GPU subset you want to run
 
 ## Manual Install
 
@@ -170,6 +283,27 @@ python -m scripts.inference \
   --use_float16
 ```
 
+## Run Training
+
+Default training launcher:
+
+```bash
+sh train.sh stage1
+sh train.sh stage2
+```
+
+8x H100 training launcher:
+
+```bash
+ACCELERATE_CONFIG=./configs/training/gpu_8xh100.yaml \
+TRAIN_CONFIG=./configs/training/stage1_8xh100.yaml \
+sh train.sh stage1
+
+ACCELERATE_CONFIG=./configs/training/gpu_8xh100.yaml \
+TRAIN_CONFIG=./configs/training/stage2_8xh100.yaml \
+sh train.sh stage2
+```
+
 ## Troubleshooting
 
 ### `ImportError: huggingface-hub>=0.19.3,<1.0 is required`
@@ -223,6 +357,24 @@ huggingface-cli download stabilityai/sd-vae-ft-mse \
 
 These messages are usually not the blocker for MuseTalk inference. MuseTalk uses PyTorch for the actual model path. If PyTorch sees your GPU correctly, these TensorFlow warnings can typically be ignored.
 
+### Training uses the wrong GPU count or wrong GPU IDs
+
+Check the accelerate config you are using:
+
+- `configs/training/gpu.yaml`
+- `configs/training/gpu_8xh100.yaml`
+
+Make sure `gpu_ids` and `num_processes` match the GPUs you want to use.
+
+You can also override the launcher config when calling `train.sh`:
+
+```bash
+ACCELERATE_CONFIG=./configs/training/gpu_8xh100.yaml \
+TRAIN_CONFIG=./configs/training/stage1_8xh100.yaml \
+MAIN_PROCESS_PORT=29503 \
+sh train.sh stage1
+```
+
 ### `mmcv` tries to build from source and fails
 
 Use the validated version set in this document. In particular:
@@ -238,6 +390,8 @@ The repository now includes:
 
 - `install_ubuntu_h100_venv.sh` for `python -m venv` based setup
 - `install_ubuntu_h100.sh` for Conda-based setup
+- `Dockerfile` and `.dockerignore` for containerized setup
 - an updated `download_weights.sh` that keeps `huggingface_hub` below `1.0`
 - post-install repinning of critical packages in the install scripts
-
+- `gpu_8xh100.yaml`, `stage1_8xh100.yaml`, and `stage2_8xh100.yaml` for multi-GPU training
+- a training path that now honors `solver.mixed_precision`

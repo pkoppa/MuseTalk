@@ -95,6 +95,15 @@ def initialize_models_and_optimizers(cfg, accelerator, weight_dtype):
     if cfg.solver.gradient_checkpointing:
         model_dict['unet'].enable_gradient_checkpointing()
 
+    if cfg.solver.enable_xformers_memory_efficient_attention:
+        try:
+            model_dict['unet'].enable_xformers_memory_efficient_attention()
+        except Exception as exc:
+            logger.warning(
+                "xFormers memory efficient attention is enabled in config but could not be activated: %s",
+                exc,
+            )
+
     if cfg.solver.scale_lr:
         learning_rate = (
             cfg.solver.learning_rate
@@ -171,6 +180,8 @@ def initialize_dataloaders(cfg):
         batch_size=cfg.data.train_bs,
         shuffle=True,
         num_workers=cfg.data.num_workers,
+        pin_memory=cfg.data.get('pin_memory', True),
+        persistent_workers=cfg.data.get('persistent_workers', True) and cfg.data.num_workers > 0,
     )
     
     dataloader_dict['val_dataset'] = PortraitDataset(cfg={
@@ -194,6 +205,8 @@ def initialize_dataloaders(cfg):
         batch_size=cfg.data.train_bs,
         shuffle=True,
         num_workers=1,
+        pin_memory=cfg.data.get('pin_memory', True),
+        persistent_workers=False,
     )
     
     return dataloader_dict

@@ -52,11 +52,23 @@ def main(cfg):
     save_dir = f"{cfg.output_dir}/{exp_name}"
     os.makedirs(save_dir, exist_ok=True)
 
+    mixed_precision = str(cfg.solver.get("mixed_precision", "fp32")).lower()
+    if mixed_precision == "fp32":
+        accelerator_mixed_precision = "no"
+    elif mixed_precision in {"no", "fp16", "bf16"}:
+        accelerator_mixed_precision = mixed_precision
+    else:
+        raise ValueError(
+            f"Unsupported mixed_precision value: {cfg.solver.mixed_precision}. "
+            "Use one of: fp32, fp16, bf16."
+        )
+
     kwargs = DistributedDataParallelKwargs()
     process_group_kwargs = InitProcessGroupKwargs(
         timeout=timedelta(seconds=5400))
     accelerator = Accelerator(
         gradient_accumulation_steps=cfg.solver.gradient_accumulation_steps,
+        mixed_precision=accelerator_mixed_precision,
         log_with=["tensorboard", LoggerType.TENSORBOARD],
         project_dir=os.path.join(save_dir, "./tensorboard"),
         kwargs_handlers=[kwargs, process_group_kwargs],
@@ -81,7 +93,12 @@ def main(cfg):
         print('cfg.seed', cfg.seed, accelerator.process_index)
         seed_everything(cfg.seed + accelerator.process_index)
 
-    weight_dtype = torch.float32
+    if accelerator.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif accelerator.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+    else:
+        weight_dtype = torch.float32
 
     model_dict = initialize_models_and_optimizers(cfg, accelerator, weight_dtype)
     dataloader_dict = initialize_dataloaders(cfg)
