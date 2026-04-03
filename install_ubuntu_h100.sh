@@ -1,0 +1,177 @@
+#!/bin/bash
+
+set -euo pipefail
+
+ENV_NAME="${ENV_NAME:-musetalk}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
+TORCH_VERSION="${TORCH_VERSION:-2.1.2}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.16.2}"
+TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.1.2}"
+TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
+INSTALL_APT_DEPS="${INSTALL_APT_DEPS:-1}"
+DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
+RUN_VERIFY="${RUN_VERIFY:-1}"
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+log() {
+  echo
+  echo "==> $1"
+}
+
+die() {
+  echo "ERROR: $1" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  cat <<EOF
+Usage: ./install_ubuntu_h100.sh
+
+Optional environment variables:
+  ENV_NAME=musetalk
+  PYTHON_VERSION=3.10
+  TORCH_VERSION=2.1.2
+  TORCHVISION_VERSION=0.16.2
+  TORCHAUDIO_VERSION=2.1.2
+  TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121
+  INSTALL_APT_DEPS=1
+  DOWNLOAD_WEIGHTS=1
+  RUN_VERIFY=1
+  HF_ENDPOINT=<optional mirror>
+
+Examples:
+  ./install_ubuntu_h100.sh
+  ENV_NAME=musetalk-h100 ./install_ubuntu_h100.sh
+  INSTALL_APT_DEPS=0 DOWNLOAD_WEIGHTS=0 ./install_ubuntu_h100.sh
+EOF
+  exit 0
+fi
+
+log "Checking base requirements"
+require_command bash
+require_command git
+require_command conda
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  nvidia-smi
+else
+  echo "WARNING: nvidia-smi not found. GPU verification will be limited."
+fi
+
+if [[ -f /etc/os-release ]]; then
+  . /etc/os-release
+  echo "Detected OS: ${PRETTY_NAME:-unknown}"
+fi
+
+if [[ "${INSTALL_APT_DEPS}" == "1" ]]; then
+  log "Installing Ubuntu system packages"
+  require_command sudo
+  sudo apt-get update
+  sudo apt-get install -y \
+    ffmpeg \
+    libgl1 \
+    libglib2.0-0 \
+    build-essential \
+    cmake \
+    ninja-build
+fi
+
+log "Activating conda"
+CONDA_BASE="$(conda info --base)"
+source "${CONDA_BASE}/etc/profile.d/conda.sh"
+
+if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
+  echo "Conda environment '${ENV_NAME}' already exists; reusing it."
+else
+  log "Creating conda environment ${ENV_NAME}"
+  conda create -y -n "${ENV_NAME}" "python=${PYTHON_VERSION}"
+fi
+
+conda activate "${ENV_NAME}"
+
+log "Upgrading packaging tools"
+python -m pip install -U pip setuptools wheel
+
+log "Installing PyTorch"
+pip install \
+  "torch==${TORCH_VERSION}" \
+  "torchvision==${TORCHVISION_VERSION}" \
+  "torchaudio==${TORCHAUDIO_VERSION}" \
+  --index-url "${TORCH_INDEX_URL}"
+
+log "Installing MuseTalk Python requirements"
+pip install -r "${ROOT_DIR}/requirements.txt"
+
+log "Installing OpenMMLab dependencies"
+pip install --no-cache-dir -U openmim
+mim install mmengine
+mim install "mmcv==2.0.1"
+mim install "mmdet==3.1.0"
+mim install "mmpose==1.1.0"
+
+if [[ "${DOWNLOAD_WEIGHTS}" == "1" ]]; then
+  log "Downloading model weights"
+  bash "${ROOT_DIR}/download_weights.sh"
+fi
+
+if [[ "${RUN_VERIFY}" == "1" ]]; then
+  log "Running verification"
+  python - <<'PY'
+import os
+import torch
+import mmcv
+import mmdet
+import mmpose
+
+print("torch:", torch.__version__)
+print("torch cuda:", torch.version.cuda)
+print("cuda available:", torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("gpu count:", torch.cuda.device_count())
+    print("gpu0:", torch.cuda.get_device_name(0))
+print("mmcv:", mmcv.__version__)
+print("mmdet:", mmdet.__version__)
+print("mmpose:", mmpose.__version__)
+
+required_paths = [
+    "models/musetalkV15/unet.pth",
+    "models/musetalkV15/musetalk.json",
+    "models/sd-vae/config.json",
+    "models/whisper/config.json",
+    "models/dwpose/dw-ll_ucoco_384.pth",
+    "models/syncnet/latentsync_syncnet.pt",
+    "models/face-parse-bisent/79999_iter.pth",
+    "models/face-parse-bisent/resnet18-5c106cde.pth",
+]
+missing = [path for path in required_paths if not os.path.exists(path)]
+if missing:
+    print("Missing model files:")
+    for path in missing:
+        print(" -", path)
+else:
+    print("All required model files are present.")
+PY
+fi
+
+log "Install complete"
+cat <<EOF
+Next steps:
+  conda activate ${ENV_NAME}
+  cd ${ROOT_DIR}
+  sh inference.sh v1.5 normal
+
+If you want fp16 inference on a single GPU:
+  python -m scripts.inference \\
+    --inference_config configs/inference/test.yaml \\
+    --result_dir results/test \\
+    --unet_model_path models/musetalkV15/unet.pth \\
+    --unet_config models/musetalkV15/musetalk.json \\
+    --version v15 \\
+    --gpu_id 0 \\
+    --use_float16
+EOF
