@@ -95,7 +95,8 @@ fi
 conda activate "${ENV_NAME}"
 
 log "Upgrading packaging tools"
-python -m pip install -U pip setuptools wheel
+python -m pip install -U pip wheel
+python -m pip install "setuptools<81"
 
 log "Installing PyTorch"
 pip install \
@@ -110,7 +111,7 @@ pip install -r "${ROOT_DIR}/requirements.txt"
 log "Installing OpenMMLab dependencies"
 pip install --no-cache-dir -U openmim
 mim install mmengine
-mim install "mmcv==2.0.1"
+pip install --no-build-isolation "mmcv==2.0.1"
 mim install "mmdet==3.1.0"
 mim install "mmpose==1.1.0"
 
