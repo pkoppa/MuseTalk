@@ -35,9 +35,9 @@ Usage: ./install_ubuntu_h100.sh
 Optional environment variables:
   ENV_NAME=musetalk
   PYTHON_VERSION=3.10
-  TORCH_VERSION=2.1.2
-  TORCHVISION_VERSION=0.16.2
-  TORCHAUDIO_VERSION=2.1.2
+  TORCH_VERSION=2.1.0
+  TORCHVISION_VERSION=0.16.0
+  TORCHAUDIO_VERSION=2.1.0
   TORCH_INDEX_URL=https://download.pytorch.org/whl/cu121
   INSTALL_APT_DEPS=1
   DOWNLOAD_WEIGHTS=1
@@ -114,6 +114,13 @@ pip install "mmengine==0.10.7"
 pip install "mmcv==2.1.0" -f "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/index.html"
 pip install "mmdet==3.2.0"
 pip install "mmpose==1.2.0"
+
+log "Reapplying critical repo pins"
+pip install --upgrade --force-reinstall \
+  "numpy==1.23.5" \
+  "opencv-python==4.9.0.80" \
+  "huggingface_hub==0.30.2" \
+  "transformers==4.39.2"
 
 if [[ "${DOWNLOAD_WEIGHTS}" == "1" ]]; then
   log "Downloading model weights"

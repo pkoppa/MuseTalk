@@ -147,6 +147,8 @@ We also hope you note that we have not verified, maintained, or updated third-pa
 ## Installation
 To prepare the Python environment and install additional packages such as opencv, diffusers, mmcv, etc., please follow the steps below:
 
+For Ubuntu servers using `python -m venv`, CUDA 12.x, or NVIDIA H100 GPUs, please use the updated guide in [INSTALL_INSTRUCTION.md](INSTALL_INSTRUCTION.md) or run `./install_ubuntu_h100_venv.sh`. The legacy instructions below are kept for reference and may require older CUDA / PyTorch combinations.
+
 ### Build environment
 We recommend Python 3.10 and CUDA 11.7. Set up your environment as follows:
 

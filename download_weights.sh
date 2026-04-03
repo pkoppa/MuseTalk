@@ -6,8 +6,10 @@ CheckpointsDir="models"
 # Create necessary directories
 mkdir -p models/musetalk models/musetalkV15 models/syncnet models/dwpose models/face-parse-bisent models/sd-vae models/whisper
 
-# Install required packages
-pip install -U "huggingface_hub[cli]"
+# Install required packages.
+# Keep huggingface_hub below 1.0 because this repo pins transformers==4.39.2,
+# which requires huggingface-hub>=0.19.3,<1.0.
+pip install -U "huggingface_hub[cli]<1.0"
 pip install gdown
 
 # Optionally use a Hugging Face mirror if the caller sets HF_ENDPOINT.
