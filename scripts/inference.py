@@ -86,8 +86,7 @@ def main(args):
             # Get task configuration
             video_path = inference_config[task_id]["video_path"]
             audio_path = inference_config[task_id]["audio_path"]
-            if "result_name" in inference_config[task_id]:
-                args.output_vid_name = inference_config[task_id]["result_name"]
+            task_output_vid_name = inference_config[task_id].get("result_name", args.output_vid_name)
             
             # Set bbox_shift based on version
             if args.version == "v15":
@@ -110,13 +109,14 @@ def main(args):
             os.makedirs(result_img_save_path, exist_ok=True)
             
             # Set output video paths
-            if args.output_vid_name is None:
+            if task_output_vid_name is None:
                 output_vid_name = os.path.join(temp_dir, output_basename + ".mp4")
             else:
-                output_vid_name = os.path.join(temp_dir, args.output_vid_name)
+                output_vid_name = os.path.join(temp_dir, task_output_vid_name)
             output_vid_name_concat = os.path.join(temp_dir, output_basename + "_concat.mp4")
             
             # Extract frames from source video
+            save_dir_full = None
             if get_file_type(video_path) == "video":
                 save_dir_full = os.path.join(temp_dir, input_basename)
                 os.makedirs(save_dir_full, exist_ok=True)
@@ -228,19 +228,36 @@ def main(args):
 
             # Save prediction results
             temp_vid_path = f"{temp_dir}/temp_{input_basename}_{audio_basename}.mp4"
-            cmd_img2video = f"ffmpeg -y -v warning -r {fps} -f image2 -i {result_img_save_path}/%08d.png -vcodec libx264 -vf format=yuv420p -crf 18 {temp_vid_path}"
-            print("Video generation command:", cmd_img2video)
-            os.system(cmd_img2video)   
-            
-            cmd_combine_audio = f"ffmpeg -y -v warning -i {audio_path} -i {temp_vid_path} {output_vid_name}"
-            print("Audio combination command:", cmd_combine_audio) 
-            os.system(cmd_combine_audio)
+            cmd_img2video = [
+                "ffmpeg", "-y", "-v", "warning",
+                "-r", str(fps),
+                "-f", "image2",
+                "-i", f"{result_img_save_path}/%08d.png",
+                "-vcodec", "libx264",
+                "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2,format=yuv420p",
+                "-crf", "18",
+                temp_vid_path,
+            ]
+            print("Video generation command:", " ".join(cmd_img2video))
+            subprocess.run(cmd_img2video, check=True)
+
+            cmd_combine_audio = [
+                "ffmpeg", "-y", "-v", "warning",
+                "-i", audio_path,
+                "-i", temp_vid_path,
+                "-shortest",
+                output_vid_name,
+            ]
+            print("Audio combination command:", " ".join(cmd_combine_audio))
+            subprocess.run(cmd_combine_audio, check=True)
             
             # Clean up temporary files
             shutil.rmtree(result_img_save_path)
-            os.remove(temp_vid_path)
+            if os.path.exists(temp_vid_path):
+                os.remove(temp_vid_path)
             
-            shutil.rmtree(save_dir_full)
+            if save_dir_full and os.path.exists(save_dir_full):
+                shutil.rmtree(save_dir_full)
             if not args.saved_coord:
                 os.remove(crop_coord_save_path)
                     

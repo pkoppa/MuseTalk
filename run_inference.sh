@@ -30,7 +30,7 @@ if [[ "$AUDIO_PATH" != *.wav ]]; then
   exit 1
 fi
 
-python3 - <<PY
+python - <<PY
 from pathlib import Path
 
 input_path = Path(${INPUT_PATH@Q}).resolve()
@@ -49,7 +49,7 @@ if output_name:
 config_path.write_text("\\n".join(lines) + "\\n")
 PY
 
-python3 -m scripts.inference \
+python -m scripts.inference \
   --inference_config "$TMP_CONFIG_PATH" \
   --result_dir "${ROOT_DIR}/results/test" \
   --unet_model_path "${ROOT_DIR}/models/musetalkV15/unet.pth" \
@@ -59,11 +59,18 @@ python3 -m scripts.inference \
   --use_float16
 
 if [ -n "$OUTPUT_NAME" ]; then
-  echo "Output saved to ${ROOT_DIR}/results/test/v15/${OUTPUT_NAME}"
+  OUTPUT_PATH="${ROOT_DIR}/results/test/v15/${OUTPUT_NAME}"
 else
   INPUT_BASENAME=$(basename "$INPUT_PATH")
   INPUT_BASENAME="${INPUT_BASENAME%.*}"
   AUDIO_BASENAME=$(basename "$AUDIO_PATH")
   AUDIO_BASENAME="${AUDIO_BASENAME%.*}"
-  echo "Output saved to ${ROOT_DIR}/results/test/v15/${INPUT_BASENAME}_${AUDIO_BASENAME}.mp4"
+  OUTPUT_PATH="${ROOT_DIR}/results/test/v15/${INPUT_BASENAME}_${AUDIO_BASENAME}.mp4"
 fi
+
+if [ ! -f "$OUTPUT_PATH" ]; then
+  echo "Inference finished but output file was not created: $OUTPUT_PATH"
+  exit 1
+fi
+
+echo "Output saved to ${OUTPUT_PATH}"
