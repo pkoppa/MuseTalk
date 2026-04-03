@@ -4,9 +4,9 @@ set -euo pipefail
 
 PYTHON_BIN="${PYTHON_BIN:-python3.10}"
 VENV_DIR="${VENV_DIR:-.venv}"
-TORCH_VERSION="${TORCH_VERSION:-2.1.2}"
-TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.16.2}"
-TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.1.2}"
+TORCH_VERSION="${TORCH_VERSION:-2.1.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.16.0}"
+TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.1.0}"
 TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu121}"
 INSTALL_APT_DEPS="${INSTALL_APT_DEPS:-1}"
 DOWNLOAD_WEIGHTS="${DOWNLOAD_WEIGHTS:-1}"
@@ -103,10 +103,10 @@ pip install -r "${ROOT_DIR}/requirements.txt"
 
 log "Installing OpenMMLab dependencies"
 pip install --no-cache-dir -U openmim
-mim install mmengine
-pip install --no-build-isolation "mmcv==2.0.1"
-mim install "mmdet==3.1.0"
-mim install "mmpose==1.1.0"
+pip install "mmengine==0.10.7"
+pip install "mmcv==2.1.0" -f "https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/index.html"
+pip install "mmdet==3.2.0"
+pip install "mmpose==1.2.0"
 
 if [[ "${DOWNLOAD_WEIGHTS}" == "1" ]]; then
   log "Downloading model weights"
